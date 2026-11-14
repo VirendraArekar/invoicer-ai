@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: invoicer-ai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: invoicer_user
+      POSTGRES_PASSWORD: invoicer_secret_password
+      POSTGRES_DB: invoicer_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U invoicer_user -d invoicer_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: invoicer-ai-backend
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      NODE_ENV: production
+      DATABASE_URL: postgresql://invoicer_user:invoicer_secret_password@postgres:5432/invoicer_db
+      DATABASE_SSL: "false"
+      JWT_SECRET: production-jwt-secret-key-invoicer-ai-2026
+      JWT_EXPIRATION: 7d
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: gemini-4-hydrogen
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: invoicer-ai-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  backend_uploads:
